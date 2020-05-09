@@ -13,7 +13,7 @@ def f(carry, noise_t):
     return (beta, z_prev, tau), z_t
 
 
-def singlevariate_kf(T, T_forecast, obs=None):
+def singlevariate_kf(T=None, T_forecast=15, obs=None):
     """Define Kalman Filter in a single variate fashion.
 
     Parameters
@@ -65,7 +65,7 @@ def multivariate_kf(T=None, T_forecast=15, obs=None):
        observed variable (infected, deaths...)
 
     """
-    T = len(obs)
+    T = len(obs) if T is None else T
     beta = numpyro.sample(
         name="beta", fn=dist.Normal(loc=jnp.zeros(2), scale=jnp.ones(2))
     )
