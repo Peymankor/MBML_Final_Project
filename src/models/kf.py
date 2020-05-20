@@ -50,6 +50,58 @@ def singlevariate_kf(T=None, T_forecast=15, obs=None):
     )
 
 
+def multih_kf(T=None, T_forecast=15, hidden=4, obs=None):
+    """Define Kalman Filter: multiple hidden variables; just one time series.
+
+    Parameters
+    ----------
+    T:  int
+    T_forecast: int
+        Times to forecast ahead.
+    hidden: int
+        number of variables in the latent space
+    obs: np.array
+        observed variable (infected, deaths...)
+
+    """
+    # Define priors over beta, tau, sigma, z_1 (keep the shapes in mind)
+    T = len(obs) if T is None else T
+    beta = numpyro.sample(
+        name="beta", fn=dist.Normal(loc=jnp.zeros(hidden), scale=jnp.ones(hidden))
+    )
+    tau = numpyro.sample(name="tau", fn=dist.HalfCauchy(scale=jnp.ones(2)))
+    sigma = numpyro.sample(name="sigma", fn=dist.HalfCauchy(scale=0.1))
+    z_prev = numpyro.sample(
+        name="z_1", fn=dist.Normal(loc=jnp.zeros(2), scale=jnp.ones(2))
+    )
+    # Define LKJ prior
+    L_Omega = numpyro.sample("L_Omega", dist.LKJCholesky(2, 10.0))
+    Sigma_lower = jnp.matmul(
+        jnp.diag(jnp.sqrt(tau)), L_Omega
+    )  # lower cholesky factor of the covariance matrix
+    noises = numpyro.sample(
+        "noises",
+        fn=dist.MultivariateNormal(loc=jnp.zeros(2), scale_tril=Sigma_lower),
+        sample_shape=(T + T_forecast - 1,),
+    )
+
+    # Propagate the dynamics forward using jax.lax.scan
+    carry = (beta, z_prev, tau)
+    z_collection = [z_prev]
+    carry, zs_exp = lax.scan(f, carry, noises, T + T_forecast - 1)
+    z_collection = jnp.concatenate((jnp.array(z_collection), zs_exp), axis=0)
+
+    # Sample the observed y (y_obs) and missing y (y_mis)
+    numpyro.sample(
+        name="y_obs",
+        fn=dist.Normal(loc=z_collection[:T, :].sum(axis=1), scale=sigma),
+        obs=obs[:, 0],
+    )
+    numpyro.sample(
+        name="y_pred", fn=dist.Normal(loc=z_collection[T:, :].sum(axis=1), scale=sigma), obs=None
+    )
+
+
 def multivariate_kf(T=None, T_forecast=15, obs=None):
     """Define Kalman Filter in a multivariate fashion.
 
