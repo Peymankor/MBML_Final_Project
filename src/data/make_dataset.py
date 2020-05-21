@@ -1,30 +1,68 @@
-# -*- coding: utf-8 -*-
+"""Fetch and wrangle raw data."""
 import click
 import logging
+import pandas as pd
+
+from typing import List
 from pathlib import Path
-from dotenv import find_dotenv, load_dotenv
+
+
+def fetch_country_cov(country: str, feat: List = "Confirmed"):
+    """Fetch COVID19 information `feat` of a `country`."""
+    if isinstance(feat, str):
+        feat = [feat]
+    df = pd.read_csv(
+        "https://raw.githubusercontent.com/datasets/covid-19/master/data/countries-aggregated.csv",
+        parse_dates=["Date"],
+    )
+    return df.loc[df.Country == country, ["Date"] + feat]
+
+
+def fetch_country_mob(in_file, country: str):
+    """Get mobility data in file `in_file` from a `country`."""
+    df = pd.read_csv(in_file, parse_dates=["date"])
+    return (
+        df.loc[
+            df.country_region == country,
+            [
+                "date",
+                "retail_and_recreation_percent_change_from_baseline",
+                "grocery_and_pharmacy_percent_change_from_baseline",
+                "parks_percent_change_from_baseline",
+                "transit_stations_percent_change_from_baseline",
+            ],
+        ]
+        .rename(columns={"date": "Date"})
+        .reset_index(drop=True)
+    )
 
 
 @click.command()
-@click.argument('input_filepath', type=click.Path(exists=True))
-@click.argument('output_filepath', type=click.Path())
-def main(input_filepath, output_filepath):
-    """ Runs data processing scripts to turn raw data from (../raw) into
-        cleaned data ready to be analyzed (saved in ../processed).
+@click.argument("input_mobility", type=click.Path(exists=True))
+@click.argument("output", type=click.Path())
+@click.option("--country", type=str, prompt="Country", help="Country to filter from.")
+@click.option("--feat", type=str, help="Feature to extract.", default="Confirmed")
+def main(input_mobility, output, country, feat="Confirmed"):
+    """Fetch and turn raw data into cleaned data.
+
+    From (../raw) into cleaned data ready to be analyzed (in ../processed).
     """
     logger = logging.getLogger(__name__)
-    logger.info('making final data set from raw data')
+
+    logger.info("Fetching COVID19 data from from GitHub.")
+    df_cov = fetch_country_cov(country, feat)
+    logger.info(f"Fetching mobility data from from file {input_mobility}.")
+    df_mov = fetch_country_mob(input_mobility, country)
+
+    df_cov.merge(df_mov, on="Date").to_csv(output, index=False)
+    logger.info(f"File generated at {output}")
 
 
-if __name__ == '__main__':
-    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+if __name__ == "__main__":
+    log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=log_fmt)
 
     # not used in this stub but often useful for finding various files
     project_dir = Path(__file__).resolve().parents[2]
-
-    # find .env automagically by walking up directories until it's found, then
-    # load up the .env entries as environment variables
-    load_dotenv(find_dotenv())
 
     main()
