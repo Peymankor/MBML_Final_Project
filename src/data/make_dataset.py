@@ -52,9 +52,16 @@ def main(input_mobility, output, country, feat="Confirmed"):
     logger.info("Fetching COVID19 data from from GitHub.")
     df_cov = fetch_country_cov(country, feat)
     logger.info(f"Fetching mobility data from from file {input_mobility}.")
-    df_mov = fetch_country_mob(input_mobility, country)
+    df_mob = fetch_country_mob(input_mobility, country)
+    df = df_cov.merge(df_mob, on="Date")
+    try:
+        df.iloc[:, 2:] = df.iloc[:, 2:].astype(int)
+    except ValueError:
+        logger.debug("Mobility Data not be converted to int: NAs received.")
+        df.iloc[:, 2:] = df.iloc[:, 2:].astype(float)
 
-    df_cov.merge(df_mov, on="Date").to_csv(output, index=False)
+    df.to_csv(output, index=False)
+
     logger.info(f"File generated at {output}")
 
 
