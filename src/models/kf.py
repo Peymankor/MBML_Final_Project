@@ -50,6 +50,35 @@ def singlevariate_kf(T=None, T_forecast=15, obs=None):
     )
 
 
+def twoh_c_kf(T=None, T_forecast=15, obs=None):
+    """Define Kalman Filter with two hidden variates."""
+    T = len(obs) if T is None else T
+    
+    # Define priors over beta, tau, sigma, z_1 (keep the shapes in mind)
+    #W = numpyro.sample(name="W", fn=dist.Normal(loc=jnp.zeros((2,4)), scale=jnp.ones((2,4))))
+    beta = numpyro.sample(name="beta", fn=dist.Normal(loc=jnp.array([0.,0.]), scale=jnp.ones(2)))
+    tau = numpyro.sample(name="tau", fn=dist.HalfCauchy(scale=jnp.ones(2)))
+    sigma = numpyro.sample(name="sigma", fn=dist.HalfCauchy(scale=.1))
+    z_prev = numpyro.sample(name="z_1", fn=dist.Normal(loc=jnp.zeros(2), scale=jnp.ones(2)))
+    # Define LKJ prior
+    L_Omega = numpyro.sample("L_Omega", dist.LKJCholesky(2, 10.))
+    Sigma_lower = jnp.matmul(jnp.diag(jnp.sqrt(tau)), L_Omega) # lower cholesky factor of the covariance matrix
+    noises = numpyro.sample("noises", fn=dist.MultivariateNormal(loc=jnp.zeros(2), scale_tril=Sigma_lower), sample_shape=(T+T_forecast,))
+    # Propagate the dynamics forward using jax.lax.scan
+    carry = (beta, z_prev, tau)
+    z_collection = [z_prev]
+    carry, zs_exp = lax.scan(f, carry, noises, T+T_forecast)
+    z_collection = jnp.concatenate((jnp.array(z_collection), zs_exp), axis=0)
+
+    c = numpyro.sample(name="c", fn=dist.Normal(loc=jnp.array([[0.], [0.]]), scale=jnp.ones((2,1))))
+    obs_mean = jnp.dot(z_collection[:T,:], c).squeeze()
+    pred_mean = jnp.dot(z_collection[T:,:], c).squeeze()
+
+    # Sample the observed y (y_obs)
+    numpyro.sample(name="y_obs", fn=dist.Normal(loc=obs_mean, scale=sigma), obs=obs)
+    numpyro.sample(name="y_pred", fn=dist.Normal(loc=pred_mean, scale=sigma), obs=None)
+
+
 def multih_kf(T=None, T_forecast=15, hidden=4, obs=None):
     """Define Kalman Filter: multiple hidden variables; just one time series.
 
