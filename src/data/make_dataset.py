@@ -15,13 +15,14 @@ def fetch_country_cov(country: str, feat: List = "Confirmed"):
         "https://raw.githubusercontent.com/datasets/covid-19/master/data/countries-aggregated.csv",
         parse_dates=["Date"],
     )
+    df.Date = pd.to_datetime(df.Date)
     return df.loc[df.Country == country, ["Date"] + feat]
 
 
 def fetch_country_mob(in_file, country: str):
     """Get mobility data in file `in_file` from a `country`."""
     df = pd.read_csv(in_file, parse_dates=["date"])
-    return (
+    df = (
         df.loc[
             df.country_region == country,
             [
@@ -35,6 +36,8 @@ def fetch_country_mob(in_file, country: str):
         .rename(columns={"date": "Date"})
         .reset_index(drop=True)
     )
+    df.Date = pd.to_datetime(df.Date)
+    return df
 
 
 @click.command()
@@ -52,7 +55,7 @@ def main(input_mobility, output, country, feat="Confirmed"):
     logger.info("Fetching COVID19 data from from GitHub.")
     df_cov = fetch_country_cov(country, feat)
     logger.info(f"Fetching mobility data from from file {input_mobility}.")
-    df_mob = fetch_country_mob(input_mobility, country)
+    df_mob = fetch_country_mob(input_mobility, country).iloc[:57, :]
     df = df_cov.merge(df_mob, on="Date")
     try:
         df.iloc[:, 2:] = df.iloc[:, 2:].astype(int)
@@ -60,6 +63,7 @@ def main(input_mobility, output, country, feat="Confirmed"):
         logger.debug("Mobility Data not be converted to int: NAs received.")
         df.iloc[:, 2:] = df.iloc[:, 2:].astype(float)
 
+    # duplicated dates on mobility, take the daily mean
     df.to_csv(output, index=False)
 
     logger.info(f"File generated at {output}")
