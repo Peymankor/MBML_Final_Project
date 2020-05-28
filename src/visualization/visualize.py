@@ -8,19 +8,25 @@ def get_samples(mcmc):
     return {k: v for k, v in mcmc.get_samples().items()}
 
 
-def plot_samples(hmc_samples, nodes):
+def plot_samples(hmc_samples, nodes, dist=True):
     """Plot samples from the variables in `nodes`."""
     for node in nodes:
         if len(hmc_samples[node].shape) > 1:
             n_vars = hmc_samples[node].shape[1]
             for i in range(n_vars):
                 plt.figure(figsize=(4, 3))
-                sns.distplot(hmc_samples[node][:, i], label=node + "%d" % i)
+                if dist:
+                    sns.distplot(hmc_samples[node][:, i], label=node + "%d" % i)
+                else:
+                    plt.plot(hmc_samples[node][:, i], label=node + "%d" % i)
                 plt.legend()
                 plt.show()
         else:
             plt.figure(figsize=(4, 3))
-            sns.distplot(hmc_samples[node], label=node)
+            if dist:
+                sns.distplot(hmc_samples[node], label=node)
+            else:
+                plt.plot(hmc_samples[node], label=node)
             plt.legend()
             plt.show()
 
